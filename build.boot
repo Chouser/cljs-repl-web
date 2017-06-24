@@ -154,7 +154,7 @@
   (with-pre-wrap [fileset]
     (boot.util/info "Add version.properties...\n")
     (-> fileset
-        (add-resource (java.io.File. ".") :include #{#"^version\.properties$"})
+        #_(add-resource (java.io.File. ".") :include #{#"^version\.properties$"})
         commit!)))
 
 (declare add-cache add-cljs-source)
