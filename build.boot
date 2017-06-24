@@ -124,7 +124,7 @@
    :env {:source-paths #{"src/clj" "src/cljs" "env/dev/cljs" "dev"}
          :resource-paths #{"resources/public/"}}
    :cljs {:source-map true
-          :optimizations :simple
+          :optimizations :none
           :compiler-options dev-compiler-options}
    :test-cljs {:optimizations :simple
                :cljs-opts dev-compiler-options

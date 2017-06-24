@@ -34,7 +34,7 @@
 (defn mesh-loaded [scene part meshes particle-systems]
   (let [mesh (nth meshes 0)
         material (js/BABYLON.StandardMaterial. "m1" scene)]
-    (set! (.-diffuseColor material) (color3 0.8 0.3 0.8))
+    (set! (.-diffuseColor material) (color3 0.2 0.4 0.7))
     (set! (.-material mesh) material)
     (condp = part
       "foot 1" (doseq [x (range 3)
@@ -44,6 +44,8 @@
                      (set! (.-position foot) (vec3 (* x -20) 0 (* z -20)))))))))
 
 (defn ^:export main []
+  (when (.-stopMagbearEngine js/window)
+    ((.-stopMagbearEngine js/window)))
   (let [canvas (.getElementById js/document "renderCanvas")
         engine (js/BABYLON.Engine. canvas true)
         scene (js/BABYLON.Scene. engine)]
@@ -54,17 +56,21 @@
          #(mesh-loaded scene part %1 %2)))
 
     (set! (.-clearColor scene) (color3 0.2 0.2 0.267))
-    (doto (js/BABYLON.ArcRotateCamera. "Camera" (/ PI 2) 1.0 110 
-	                               (vec3)
-                                       scene)
+    (doto (js/BABYLON.ArcRotateCamera.
+            "Camera" (/ PI 2) 1.0 110 (vec3) scene)
       (.attachControl canvas true)
       (.setTarget (vec3)))
     (let [light (js/BABYLON.HemisphericLight. "light1" (vec3 0 1 0) scene)]
       (set! (.-intesity light) 0.5))
 
-    (.runRenderLoop engine #(.render scene))
-    (.addEventListener js/window "resize" #(.resize engine)))
-  (js/console.log "magbear engine")
+    (let [resize-fn #(.resize engine)
+          render-fn #(.render scene)]
+      (.addEventListener js/window "resize" resize-fn)
+      (.runRenderLoop engine render-fn)
+      (set! (.-stopMagbearEngine js/window)
+            #(do
+               (.removeEventListener js/window "resize" resize-fn)
+               (.stopRenderLoop engine render-fn)))))
 
   (let [{:keys [name verbose-repl? src-paths]} config/defaults
         local-storage-values (ls/get-local-storage-values)]

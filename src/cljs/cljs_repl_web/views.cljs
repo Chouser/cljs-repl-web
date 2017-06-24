@@ -61,7 +61,7 @@
                   [:p "Only what is shown in the REPL will be sent to Gist. So even if you have some items in your history but the current “screen” is empty you won’t be able to create a Gist."]]}
    :step4 {:title "Tour 4 of 9"
            :body [:div [:h1.tour-title "Clear examples"]
-                  [:p "Just under the REPL you will find many buttons, logically grouped by topic. Clicking on them will open a popup (this feature will be explained in another step of this tutorial)."]
+                  [:p "[Still TBD for magbears:] Just under the REPL you will find many buttons, logically grouped by topic. Clicking on them will open a popup (this feature will be explained in another step of this tutorial)."]
                   [:span "One of the actions you can take is send the examples directly to the REPL: for example the"]
                   [:span.symbol " + "]
                   [:span "symbol contains 5 examples you can evaluate. If for any reason you want to interrupt the examples’ evaluation just click on this button."]
