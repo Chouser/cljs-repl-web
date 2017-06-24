@@ -50,7 +50,7 @@
     (set! (.-enableOfflineSupport engine) false)
     (doseq [part ["head" "back" "tail" "foot 1"]]
       (js/BABYLON.SceneLoader.ImportMesh
-         "" "/stl/" (str "magbear - " part ".stl") scene
+         "" "stl/" (str "magbear - " part ".stl") scene
          #(mesh-loaded scene part %1 %2)))
 
     (set! (.-clearColor scene) (color3 0.2 0.2 0.267))

@@ -6,7 +6,7 @@
  :dependencies (conj '[;; Boot deps
                        [adzerk/boot-cljs            "1.7.228-1" :scope "test"]
                        [pandeiro/boot-http          "0.7.2"     :scope "test"]
-                       [adzerk/boot-reload          "0.4.4"     :scope "test"]
+                       [adzerk/boot-reload          "0.5.1"     :scope "test"]
                        [degree9/boot-semver         "1.2.4"     :scope "test"]
                        [replumb/boot-pack-source    "0.1.2-1"   :scope "test"]
                        [confetti/confetti           "0.1.2-SNAPSHOT"     :scope "test"]
@@ -175,7 +175,8 @@
           (sift :include #{#"main.out"}
                 :invert true)
           (add-cljs-source)
-          (add-cache :dir "js-cache"))))
+          (add-cache :dir "js-cache")
+          (target))))
 
 (deftask dev
   "Start the dev interactive environment."
