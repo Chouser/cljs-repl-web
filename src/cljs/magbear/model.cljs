@@ -45,6 +45,25 @@
       #_(sync-world! refs))
     goal-attr-val))
 
+(defmethod sync-attr! :sphere
+  [{:keys [elem-id goal-attr-val]}
+   {:keys [objects* scene] :as refs}]
+
+  (let [{:keys [diameter segments arc]} goal-attr-val]
+    (swap! objects* assoc-in [elem-id :mesh]
+           (js/BABYLON.MeshBuilder.CreateSphere
+            (name elem-id) (js-obj "diameter" diameter,
+                                   "segments" segments,
+                                   "arc" arc)
+            scene))
+    goal-attr-val))
+
+(defmethod sync-attr! :is-visible
+  [{:keys [elem-id goal-attr-val]} {:keys [objects*]}]
+  (when-let [mesh (get-in @objects* [elem-id :mesh])]
+    (set! (.-isVisible mesh) goal-attr-val)
+    goal-attr-val))
+
 (defmethod sync-attr! :color
   [{:keys [elem-id goal-attr-val]} {:keys [scene objects*]}]
   (when-let [mesh (get-in @objects* [elem-id :mesh])]
@@ -112,18 +131,34 @@
 (defn degrees [d]
   (/ (* Math/PI d) 180))
 
-#_
-(defn set-curl-ratio! [r]
-  (let [back-angle (degrees (* 100 r))
-        tail-angle (degrees (* 80 r))]
-    (swap! world-goal* #(-> %
-                            (assoc-in [:back :rotation] [0 0 back-angle])
-                            (assoc-in [:tail :rotation] [0 0 tail-angle])))))
+(def normal-height 12)
 
-(defn update-curl-ratio [world-goal r]
-  (let [back-angle (degrees (* 100 r))
-        tail-angle (degrees (* 80 r))]
-    (-> world-goal
+(defn scale [ratio min max]
+  (+ min (* (- max min) ratio)))
+
+(defn update-curl-ratio [goal r]
+  (let [mode-split 0.5
+        retract-limit -8
+        retract-ratio (if (< r mode-split) (* r 2) 1)
+        curl-ratio (if (< r mode-split) 0 (- (* r 2) 1))
+        head-angle (degrees (* -90 curl-ratio))
+        back-angle (degrees (* 100 curl-ratio))
+        tail-angle (degrees (* 80 curl-ratio))
+        ;; foot-extension is 0 when feet are flush with chin, positive
+        ;; when in walking position, negative when retracted
+        foot-extension (scale retract-ratio normal-height retract-limit)
+        foot-distance (- 10 foot-extension)
+
+        goal (reduce
+              (fn [goal [x z foot-id]]
+                (assoc-in goal [foot-id :position 1] foot-distance))
+              goal
+              (for [x (range 3)
+                    z (range 2)]
+                [x z (keyword (str "foot" x z))]))]
+    (-> goal
+        (assoc-in [:head :position 1] (Math/max 0 foot-extension))
+        (assoc-in [:head :rotation] [0 0 head-angle])
         (assoc-in [:back :rotation] [0 0 back-angle])
         (assoc-in [:tail :rotation] [0 0 tail-angle]))))
 
@@ -134,34 +169,38 @@
 
 (def world-actual* (atom {}))
 
-(let [parts
-      {:head {:import ["stl/" "magbear - head.stl"]
-              :position [0 10 0]
-              :color [0.2 0.4 0.9]}
-       :back {:import ["stl/" "magbear - back.stl"]
-              :parent :head
-              :color [0.2 0.4 0.7]}
-       :tail {:import ["stl/" "magbear - tail.stl"]
-              :parent :back
-              :color [0.2 0.4 0.7]}
-       :foot00 {:import ["stl/" "magbear - foot 1.stl"]
-                :parent :head
-                :position [0 0 0]
-                :color [0.2 0.4 0.7]}}
+(let [goal
+      (->
+       {:magparent {:sphere {:segments 1, :diameter 30}
+                    :is-visible true
+                    :position [0 0 0]}
+        :head {:import ["stl/" "magbear - head.stl"]
+               :parent :magparent
+               :color [0.2 0.4 0.9]}
+        :back {:import ["stl/" "magbear - back.stl"]
+               :parent :head
+               :color [0.2 0.4 0.7]}
+        :tail {:import ["stl/" "magbear - tail.stl"]
+               :parent :back
+               :color [0.2 0.4 0.7]}
+        :foot00 {:import ["stl/" "magbear - foot 1.stl"]
+                 :parent :head
+                 :position [0 0 0]
+                 :color [0.2 0.4 0.7]}}
 
-      parts (-> parts
-                (update :back update-pivot-position [-11 -10 0])
-                (update :tail update-pivot-position [7.8 -9.2 0]))
+       (into (for [x (range 3)
+                   z (range 2)
+                   :when (not (and (zero? x) (zero? z)))]
+               [(keyword (str "foot" x z))
+                {:instance :foot00
+                 :parent (nth [:head :back :tail] x)
+                 :position [(* x -20) 0 (* z -20)]}]))
 
-      more-feet
-      (into {} (for [x (range 3)
-                     z (range 2)
-                     :when (not (and (zero? x) (zero? z)))]
-                 [(keyword (str "foot" x z))
-                  {:instance :foot00
-                   :parent :head
-                   :position [(* x -20) 0 (* z -20)]}]))]
-  (def world-goal* (atom (merge parts more-feet))))
+       (update :head update-pivot-position [-49 0 0])
+       (update :back update-pivot-position [-11 -10 0])
+       (update :tail update-pivot-position [7.8 -9.2 0])
+       (update-curl-ratio 0))]
+  (def world-goal* (atom goal)))
 
 (defn init []
   (prn @world-goal*)
@@ -192,21 +231,20 @@
       (set! (.-specularColor ground-material) (color3 0.0 0.0 0.0))
       (set! (.-material ground) ground-material))
 
-    #_(let [ground (js/BABYLON.MeshBuilder.CreateSphere
+    #_(let [sphere (js/BABYLON.MeshBuilder.CreateSphere
                     "sphere" (js-obj "diameter" 30 "arc" 0.6)
                     scene)
-            ground-material (js/BABYLON.StandardMaterial. "ground-material" scene)]
-        (set! (.-diffuseColor ground-material) (color3 0.4 0.4 0.6))
-        (set! (.-bumpTexture ground-material) (js/BABYLON.Texture. "normalMap.jpg" scene))
-        (set! (.-backFaceCulling ground-material) false)
-        (set! (.-material ground) ground-material))
+            sphere-material (js/BABYLON.StandardMaterial. "sphere-material" scene)]
+        (set! (.-diffuseColor sphere-material) (color3 0.4 0.4 0.6))
+        (set! (.-bumpTexture sphere-material) (js/BABYLON.Texture. "normalMap.jpg" scene))
+        (set! (.-backFaceCulling sphere-material) false)
+        (set! (.-material sphere) sphere-material))
 
     (set! (.-clearColor scene) (color3 0.2 0.2 0.267))
     (let [light (js/BABYLON.HemisphericLight. "light1" (vec3 0 1 0) scene)]
       (set! (.-intesity light) 0.5))
 
     (let [mouse-down (atom false)
-          camera-pos (atom nil)
           render-frames (atom 5)
           camera (doto (js/BABYLON.ArcRotateCamera.
                         "Camera" (/ PI 2) 1.2 120 (vec3) scene)
@@ -214,25 +252,30 @@
                    (.setTarget (vec3)))
           resize-fn #(.resize engine)
           render-fn (fn mb-render []
-                      (let [t (- (cljs.core/system-time) start-time)]
+                      (let [t (- (cljs.core/system-time) start-time)
+                            step-height 5]
                         ;; Walking:
-                        #_(swap! world-goal*
-                                 (fn [goal]
-                                   (let [goal (assoc-in goal [:head :position 0] (* 3 (/ t 300)))
-                                         goal
-                                         (reduce
-                                          (fn [goal [x z foot-id]]
-                                            (let [theta (+ (* Math/PI (- x z)) (/ t 300))]
-                                              (assoc-in goal [foot-id :position]
-                                                        [(+ (* x -20) (* -3 (Math/cos theta)))
-                                                         (Math/max 0 (* 5 (Math/sin theta)))
-                                                         (* z -20)])))
-                                          goal
-                                          (for [x (range 3)
-                                                z (range 2)]
-                                            [x z (keyword (str "foot" x z))]))]
-                                     goal)))
-                        (let [ratio (/ (+ 1 (Math/sin (/ t 1000))) 2)]
+                        (swap! world-goal*
+                               (fn [goal]
+                                 (let [goal (assoc-in goal [:magparent :position 0] (* 3 (/ t 300)))
+                                       goal
+                                       (reduce
+                                        (fn [goal [x z foot-id]]
+                                          (let [theta (+ (* Math/PI (- x z)) (/ t 300))]
+                                            (assoc-in goal [foot-id :position]
+                                                      [(+ (* x -20) (* -3 (Math/cos theta)))
+                                                       (+ 10
+                                                          (- normal-height)
+                                                          (* step-height
+                                                             (Math/max 0 (Math/sin theta))))
+                                                       (* z -20)])))
+                                        goal
+                                        (for [x (range 3)
+                                              z (range 2)]
+                                          [x z (keyword (str "foot" x z))]))]
+                                   goal)))
+                        ;; Curling:
+                        #_(let [ratio (/ (+ 1 (Math/sin (/ t 1000))) 2)]
                           (swap! world-goal* update-curl-ratio ratio))
                         (sync-world! refs))
 
