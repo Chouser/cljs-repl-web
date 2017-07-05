@@ -14,7 +14,9 @@
   (fn [{:keys [attr] :as sync-args} refs]
     attr))
 
-(defmulti sync-mode! (fn [from-to-mode _ _] from-to-mode))
+(defmulti sync-mode!
+  (fn [{:keys [from-mode to-mode]}]
+    [from-mode to-mode]))
 
 (defmethod sync-attr! :default
   [{:keys [goal-attr-val]}]
@@ -107,31 +109,38 @@
    {:keys [objects* world-actual* world-goal*]}]
   ;; This is a mess of atoms and swapping. Think of a better way.
   (let [now (cljs.core/system-time)
-        new-actual (swap! world-actual* update-in [elem-id :mode]
-                          (fn [actual-mode]
-                            (if (keyword? actual-mode)
-                              {:from-mode actual-mode
-                               :to-mode goal-attr-val
-                               :start-time now}
-                              actual-mode)))
-        {:keys [from-mode to-mode start-time]
+        new-actual (swap! world-actual*
+                          (fn [world-actual]
+                            (let [actual-mode (get-in world-actual [elem-id :mode])]
+                              (if (map? actual-mode)
+                                world-actual
+                                (assoc-in world-actual [elem-id :mode]
+                                          {:from-mode actual-mode
+                                           :to-mode goal-attr-val
+                                           :start-time now
+                                           :from-world world-actual})))))
+        {:keys [from-mode to-mode start-time from-world]
          :as new-actual-mode} (get-in new-actual [elem-id :mode])
         mode-duration (- now start-time)
 
-        [status new-world-goal]
+        [done-mode new-world-goal]
         (try
-          (sync-mode! [from-mode to-mode] mode-duration @world-goal*)
+          (sync-mode! {:from-mode from-mode
+                       :to-mode to-mode
+                       :from-world from-world
+                       :mode-duration mode-duration
+                       :world-goal @world-goal*})
           (catch js/Error e
             (js/console.log "Error in sync-mode!"
-                            e
                             (pr-str {:from-mode from-mode
                                      :to-mode to-mode
-                                     :start-time start-time}))
-            goal-attr-val))]
+                                     :start-time start-time})
+                            e)
+            [to-mode @world-goal*]))]
     (reset! world-goal* new-world-goal)
-    (case status
-      :done goal-attr-val
-      :continue new-actual-mode)))
+    (if (= :continue done-mode)
+      new-actual-mode
+      done-mode)))
 
 ;; TODO: make sure only one sync-world! is running at a time.
 (defn sync-world!
@@ -159,7 +168,8 @@
                                  {:attr attr
                                   :elem-id elem-id
                                   :actual-val actual-attr-val
-                                  :goal-val goal-attr-val}))
+                                  :goal-val goal-attr-val})
+                                e)
                 goal-attr-val))]
         (swap! world-actual* assoc-in [elem-id attr] new-attr-val)))))
 
@@ -167,6 +177,7 @@
   (/ (* Math/PI d) 180))
 
 (def normal-height 15)
+(def step-height 5)
 
 (defn scale [ratio min max]
   (+ min (* (- max min) ratio)))
@@ -200,24 +211,57 @@
 (defn easy-ratio-over-time [total now]
   (/ (+ 1 (Math/cos (* Math/PI (+ 1 (/ now total))))) 2))
 
-(defmethod sync-mode! [nil nil] [_ mode-duration world-goal]
-  (prn :nil-nil (get-in world-goal [:magparent :mode]))
-  [:done world-goal])
+(defmethod sync-mode! [nil :stand] [{:keys [mode-duration world-goal]}]
+  [:stand world-goal])
 
-(defmethod sync-mode! [nil :stand] [_ mode-duration world-goal]
-  [:done world-goal])
+(defmethod sync-mode! [nil :walk] [{:keys [mode-duration world-goal]}]
+  [:stand world-goal])
 
-(defmethod sync-mode! [:stand :curl] [_ mode-duration world-goal]
+(defmethod sync-mode! [:stand :curl] [{:keys [mode-duration world-goal]}]
   (let [ratio (easy-ratio-over-time 3000 mode-duration)]
     (if (< mode-duration 3000)
       [:continue (update-curl-ratio world-goal ratio)]
-      [:done     (update-curl-ratio world-goal 1)])))
+      [:curl     (update-curl-ratio world-goal 1)])))
 
-(defmethod sync-mode! [:curl :stand] [_ mode-duration world-goal]
+(defmethod sync-mode! [:curl :stand] [{:keys [mode-duration world-goal]}]
   (let [ratio (easy-ratio-over-time 3000 mode-duration)]
     (if (< mode-duration 3000)
       [:continue (update-curl-ratio world-goal (- 1 ratio))]
-      [:done     (update-curl-ratio world-goal 0)])))
+      [:stand     (update-curl-ratio world-goal 0)])))
+
+(defmethod sync-mode! [:stand :walk] [{:keys [mode-duration world-goal]}]
+  [:ready-to-walk world-goal])
+
+(defmethod sync-mode! [:ready-to-walk :stand] [{:keys [mode-duration world-goal]}]
+  [:stand world-goal])
+
+(defmethod sync-mode! [:ready-to-walk :curl] [{:keys [mode-duration world-goal]}]
+  [:stand world-goal])
+
+(defmethod sync-mode! [:ready-to-walk :walk] [{:keys [mode-duration world-goal from-world]}]
+  (let [theta (/ mode-duration 300)
+        world-goal (assoc-in world-goal
+                             [:magparent :position 0]
+                             (+ (get-in from-world [:magparent :position 0])
+                                (* 3 (/ mode-duration 300))))
+        world-goal
+        (reduce
+         (fn [world-goal [x z foot-id]]
+           (let [theta (if (odd? (- x z)) theta (+ theta Math/PI))]
+             (assoc-in world-goal [foot-id :position]
+                       [(+ (* x -20) (* -3 (Math/cos theta)))
+                        (+ 10
+                           (- normal-height)
+                           (* step-height
+                              (Math/max 0 (Math/sin theta))))
+                        (* z -20)])))
+         world-goal
+         (for [x (range 3)
+               z (range 2)]
+           [x z (keyword (str "foot" x z))]))]
+    (if (> theta (* 2 Math/PI))
+      [:ready-to-walk world-goal]
+      [:continue world-goal])))
 
 (defn update-pivot-position [elem [x y z]]
   (-> elem
@@ -231,7 +275,7 @@
        {:magparent {:sphere {:segments 1, :diameter 30}
                     :is-visible false
                     :position [0 0 0]
-                    :mode :stand}
+                    :mode :walk}
         :head {:import ["stl/" "magbear - head.stl"]
                :parent :magparent
                :color [0.2 0.4 0.9]}
@@ -305,26 +349,6 @@
           render-fn (fn mb-render []
                       (let [t (- (cljs.core/system-time) start-time)
                             step-height 5]
-                       ;; Walking:
-                       #_ (swap! world-goal*
-                               (fn [goal]
-                                 (let [goal (assoc-in goal [:magparent :position 0] (* 3 (/ t 300)))
-                                       goal
-                                       (reduce
-                                        (fn [goal [x z foot-id]]
-                                          (let [theta (+ (* Math/PI (- x z)) (/ t 300))]
-                                            (assoc-in goal [foot-id :position]
-                                                      [(+ (* x -20) (* -3 (Math/cos theta)))
-                                                       (+ 10
-                                                          (- normal-height)
-                                                          (* step-height
-                                                             (Math/max 0 (Math/sin theta))))
-                                                       (* z -20)])))
-                                        goal
-                                        (for [x (range 3)
-                                              z (range 2)]
-                                          [x z (keyword (str "foot" x z))]))]
-                                   goal)))
                         (sync-world! refs))
 
                       (.render scene)
