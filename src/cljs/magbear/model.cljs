@@ -14,6 +14,8 @@
   (fn [{:keys [attr] :as sync-args} refs]
     attr))
 
+(defmulti sync-mode! (fn [from-to-mode _ _] from-to-mode))
+
 (defmethod sync-attr! :default
   [{:keys [goal-attr-val]}]
   goal-attr-val)
@@ -100,6 +102,37 @@
       (.setPivotMatrix mesh (js/BABYLON.Matrix.Translation x y z))
       goal-attr-val)))
 
+(defmethod sync-attr! :mode
+  [{:keys [elem-id goal-attr-val]}
+   {:keys [objects* world-actual* world-goal*]}]
+  ;; This is a mess of atoms and swapping. Think of a better way.
+  (let [now (cljs.core/system-time)
+        new-actual (swap! world-actual* update-in [elem-id :mode]
+                          (fn [actual-mode]
+                            (if (keyword? actual-mode)
+                              {:from-mode actual-mode
+                               :to-mode goal-attr-val
+                               :start-time now}
+                              actual-mode)))
+        {:keys [from-mode to-mode start-time]
+         :as new-actual-mode} (get-in new-actual [elem-id :mode])
+        mode-duration (- now start-time)
+
+        [status new-world-goal]
+        (try
+          (sync-mode! [from-mode to-mode] mode-duration @world-goal*)
+          (catch js/Error e
+            (js/console.log "Error in sync-mode!"
+                            e
+                            (pr-str {:from-mode from-mode
+                                     :to-mode to-mode
+                                     :start-time start-time}))
+            goal-attr-val))]
+    (reset! world-goal* new-world-goal)
+    (case status
+      :done goal-attr-val
+      :continue new-actual-mode)))
+
 ;; TODO: make sure only one sync-world! is running at a time.
 (defn sync-world!
   "Compare world-goal* with world-actual* and apply appropriate side
@@ -122,23 +155,25 @@
                refs)
               (catch js/Error e
                 (js/console.log "Error in sync-attr!"
-                                (js-obj "attr" attr
-                                        "elem-id" elem-id
-                                        "goal-attr-val" goal-attr-val))
+                                (pr-str
+                                 {:attr attr
+                                  :elem-id elem-id
+                                  :actual-val actual-attr-val
+                                  :goal-val goal-attr-val}))
                 goal-attr-val))]
         (swap! world-actual* assoc-in [elem-id attr] new-attr-val)))))
 
 (defn degrees [d]
   (/ (* Math/PI d) 180))
 
-(def normal-height 12)
+(def normal-height 15)
 
 (defn scale [ratio min max]
   (+ min (* (- max min) ratio)))
 
 (defn update-curl-ratio [goal r]
   (let [mode-split 0.5
-        retract-limit -8
+        retract-limit -6
         retract-ratio (if (< r mode-split) (* r 2) 1)
         curl-ratio (if (< r mode-split) 0 (- (* r 2) 1))
         head-angle (degrees (* -90 curl-ratio))
@@ -162,6 +197,28 @@
         (assoc-in [:back :rotation] [0 0 back-angle])
         (assoc-in [:tail :rotation] [0 0 tail-angle]))))
 
+(defn easy-ratio-over-time [total now]
+  (/ (+ 1 (Math/cos (* Math/PI (+ 1 (/ now total))))) 2))
+
+(defmethod sync-mode! [nil nil] [_ mode-duration world-goal]
+  (prn :nil-nil (get-in world-goal [:magparent :mode]))
+  [:done world-goal])
+
+(defmethod sync-mode! [nil :stand] [_ mode-duration world-goal]
+  [:done world-goal])
+
+(defmethod sync-mode! [:stand :curl] [_ mode-duration world-goal]
+  (let [ratio (easy-ratio-over-time 3000 mode-duration)]
+    (if (< mode-duration 3000)
+      [:continue (update-curl-ratio world-goal ratio)]
+      [:done     (update-curl-ratio world-goal 1)])))
+
+(defmethod sync-mode! [:curl :stand] [_ mode-duration world-goal]
+  (let [ratio (easy-ratio-over-time 3000 mode-duration)]
+    (if (< mode-duration 3000)
+      [:continue (update-curl-ratio world-goal (- 1 ratio))]
+      [:done     (update-curl-ratio world-goal 0)])))
+
 (defn update-pivot-position [elem [x y z]]
   (-> elem
       (assoc :position [(- x) (- y) (- z)])
@@ -172,8 +229,9 @@
 (let [goal
       (->
        {:magparent {:sphere {:segments 1, :diameter 30}
-                    :is-visible true
-                    :position [0 0 0]}
+                    :is-visible false
+                    :position [0 0 0]
+                    :mode :stand}
         :head {:import ["stl/" "magbear - head.stl"]
                :parent :magparent
                :color [0.2 0.4 0.9]}
@@ -202,8 +260,10 @@
        (update-curl-ratio 0))]
   (def world-goal* (atom goal)))
 
+(defn set-mode! [mode]
+  (swap! world-goal* assoc-in [:magparent :mode] mode))
+
 (defn init []
-  (prn @world-goal*)
   (when (.-stopMagbearEngine js/window)
     ((.-stopMagbearEngine js/window)))
   (let [canvas (.getElementById js/document "renderCanvas")
@@ -231,15 +291,6 @@
       (set! (.-specularColor ground-material) (color3 0.0 0.0 0.0))
       (set! (.-material ground) ground-material))
 
-    #_(let [sphere (js/BABYLON.MeshBuilder.CreateSphere
-                    "sphere" (js-obj "diameter" 30 "arc" 0.6)
-                    scene)
-            sphere-material (js/BABYLON.StandardMaterial. "sphere-material" scene)]
-        (set! (.-diffuseColor sphere-material) (color3 0.4 0.4 0.6))
-        (set! (.-bumpTexture sphere-material) (js/BABYLON.Texture. "normalMap.jpg" scene))
-        (set! (.-backFaceCulling sphere-material) false)
-        (set! (.-material sphere) sphere-material))
-
     (set! (.-clearColor scene) (color3 0.2 0.2 0.267))
     (let [light (js/BABYLON.HemisphericLight. "light1" (vec3 0 1 0) scene)]
       (set! (.-intesity light) 0.5))
@@ -254,8 +305,8 @@
           render-fn (fn mb-render []
                       (let [t (- (cljs.core/system-time) start-time)
                             step-height 5]
-                        ;; Walking:
-                        (swap! world-goal*
+                       ;; Walking:
+                       #_ (swap! world-goal*
                                (fn [goal]
                                  (let [goal (assoc-in goal [:magparent :position 0] (* 3 (/ t 300)))
                                        goal
@@ -274,9 +325,6 @@
                                               z (range 2)]
                                           [x z (keyword (str "foot" x z))]))]
                                    goal)))
-                        ;; Curling:
-                        #_(let [ratio (/ (+ 1 (Math/sin (/ t 1000))) 2)]
-                          (swap! world-goal* update-curl-ratio ratio))
                         (sync-world! refs))
 
                       (.render scene)
