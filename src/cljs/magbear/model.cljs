@@ -243,7 +243,11 @@
         world-goal (assoc-in world-goal
                              [:magparent :position 0]
                              (+ (get-in from-world [:magparent :position 0])
-                                (* 3 (/ mode-duration 300))))
+                                (* 3
+                                   (+ 1
+                                      (if (< theta Math/PI)
+                                        (Math/cos (+ Math/PI theta))
+                                        (+ 2 (Math/cos theta)))))))
         world-goal
         (reduce
          (fn [world-goal [x z foot-id]]
