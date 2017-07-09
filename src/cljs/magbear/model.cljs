@@ -279,7 +279,7 @@
        {:magparent {:sphere {:segments 1, :diameter 30}
                     :is-visible false
                     :position [0 0 0]
-                    :mode :walk}
+                    :mode :stand}
         :head {:import ["stl/" "magbear - head.stl"]
                :parent :magparent
                :color [0.2 0.4 0.9]}

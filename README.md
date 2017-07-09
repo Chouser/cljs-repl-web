@@ -65,7 +65,6 @@ The `cljs-repl-web.config/defaults` var contains the configuration map:
 {:name "Clojurescript.io Website"
  :production? true|false
  :base-path "root/"
- :core-cache-url "/my-cache/core.cljs.cache.aot.json")
  :src-paths ["/some/path1" "/some/path2")]
  :verbose-repl? true|false}
 ```

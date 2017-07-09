@@ -22,14 +22,14 @@
     (catch :default e
       (src-cb nil))))
 
-(defn load-cljs-core-cache!
-  "Load core.cljs.cache.aot.json given the url"
-  [cache-url]
+(defn load-cljs-cache!
+  "Load a transit-encoded cljs namespace cache"
+  [ns-sym cache-url]
   (fetch-file! cache-url
                (fn [txt]
                  (let [rdr   (transit/reader :json)
                        cache (transit/read rdr txt)]
-                   (cljs/load-analysis-cache! replumb-repl/st 'cljs.core cache)))))
+                   (cljs/load-analysis-cache! replumb-repl/st ns-sym cache)))))
 
 (defn print-version!
   "Return the current version from the version.properties file."

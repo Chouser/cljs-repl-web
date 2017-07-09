@@ -33,7 +33,8 @@
    ;; we load the cljs core cache manually in order to reduce the app size
    ;; see https://github.com/clojure/clojurescript/wiki/Optional-Self-hosting for more info
    ;; see also related issue in replbum https://github.com/ScalaConsultants/replumb/issues/42
-   (io/load-cljs-core-cache! (:core-cache-url config))
+   (io/load-cljs-cache! 'cljs.core "js-cache/cljs/core.cljs.cache.json")
+   (io/load-cljs-cache! 'magbear.model "js-cache/magbear/model.cljs.cache.json")
    (io/print-version! (:version-path config))
    (app/register-media-queries!)
    (app/make-init-state! config local-storage-vals)))

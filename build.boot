@@ -1,10 +1,10 @@
 (def clojure-dep '[org.clojure/clojure "1.8.0"])
-(def clojurescript-dep '[org.clojure/clojurescript "1.8.40"])
+(def clojurescript-dep '[org.clojure/clojurescript "1.9.671"])
 
 (set-env!
  :source-paths #{"dev"}
  :dependencies (conj '[;; Boot deps
-                       [adzerk/boot-cljs            "1.7.228-1" :scope "test"]
+                       [adzerk/boot-cljs            "2.0.0" :scope "test"]
                        [pandeiro/boot-http          "0.7.2"     :scope "test"]
                        [adzerk/boot-reload          "0.5.1"     :scope "test"]
                        [degree9/boot-semver         "1.2.4"     :scope "test"]
@@ -23,12 +23,12 @@
 
                        ;; App deps
                        [org.clojure/core.async      "0.2.374"]
-                       [reagent                     "0.6.0-SNAPSHOT"]
+                       [reagent                     "0.7.0"]
                        [re-frame                    "0.7.0"]
                        [replumb/replumb             "0.2.2-SNAPSHOT"]
                        [cljsjs/highlight            "8.4-0"]
                        [re-console                  "0.1.4-SNAPSHOT"]
-                       [re-com                      "0.8.1"]
+                       [re-com                      "0.9.0"]
                        [cljs-ajax                   "0.5.1"]
                        [hickory                     "0.5.4"]
                        [cljsjs/showdown             "0.4.0-1"]
@@ -93,6 +93,7 @@
 (def prod-compiler-options
   {:closure-defines {"goog.DEBUG" false
                      "clairvoyant.core.devmode" false}
+   :cache-analysis true ;; gen cache files to send to browser
    :optimize-constants true
    :static-fns true
    :elide-asserts true
@@ -136,7 +137,8 @@
    :props {"CLJS_LOG_LEVEL" "INFO"}
    :env {:source-paths #{"src/clj" "src/cljs" "env/prod/cljs"}
          :resource-paths #{"resources/public/"}}
-   :cljs {:optimizations :simple
+   :cljs {:source-map false
+          :optimizations :simple
           :compiler-options prod-compiler-options}
    :test-cljs {:optimizations :simple
                :cljs-opts prod-compiler-options
@@ -156,43 +158,6 @@
     (-> fileset
         #_(add-resource (java.io.File. ".") :include #{#"^version\.properties$"})
         commit!)))
-
-(declare add-cache add-cljs-source)
-
-;;;;;;;;;;;;;;;;;;
-;;  MAIN TASKS  ;;
-;;;;;;;;;;;;;;;;;;
-
-(deftask build
-  "Build the final artifact, if no type is passed in, it builds production."
-  [t type VAL kw "The build type, either prod or dev"]
-  (let [options (options (or type :prod))]
-    (boot.util/info "Building %s profile...\n" (:type options))
-    (apply set-env! (reduce #(into %2 %1) [] (:env options)))
-    (set-system-properties! (:props options))
-    (comp (version-file)
-          (apply cljs (reduce #(into %2 %1) [] (:cljs options)))
-          (sift :include #{#"main.out"}
-                :invert true)
-          (add-cljs-source)
-          (add-cache :dir "js-cache")
-          (target))))
-
-(deftask dev
-  "Start the dev interactive environment."
-  []
-  (boot.util/info "Starting interactive dev...\n")
-  (let [options (options :dev)]
-    (apply set-env! (reduce #(into %2 %1) [] (:env options)))
-    (set-system-properties! (:props options))
-    (comp (version-file)
-          (watch)
-          (cljs-repl)
-          (reload :on-jsload 'cljs-repl-web.core/main)
-          (apply cljs (reduce #(into %2 %1) [] (:cljs options)))
-          (add-cljs-source)
-          (add-cache :dir "js-cache")
-          (serve))))
 
 ;;;;;;;;;;;;;;;;;;;;;
 ;;  TEST (please)  ;;
@@ -293,7 +258,7 @@
         (cljs-api.generator/-main)))))
 
 (def dump-cache-deps '[[boot/core "2.6.0-SNAPSHOT"]
-                       [com.cognitect/transit-clj "0.8.285"]])
+                       [com.cognitect/transit-clj "0.8.293"]])
 
 (deftask transit-jsonify
   "Materializes the transit+json file resulting from the input transit file path.
@@ -328,18 +293,49 @@
 (deftask add-cache
   "The task fetches the core.cljs.cache.aot file from your .m2, and materializes it on the classpath.
 
-  It is added to the filese so it should be part of the build pipeline:
+  It is added to the fileset so it should be part of the build pipeline:
 
   $ boot build add-cache target"
   [d dir PATH str "The dir path where to dump the cljs.core cache file"]
   (assert dir "The dir param cannot be nil")
-  (let [dir (addons/normalize-path dir)
-        cache-json-name "core.cljs.cache.aot.json"
-        cache-fs-path "cljs/core.cljs.cache.aot.edn"
-        cache-fs-path-regex (re-pattern cache-fs-path)]
-    (comp (with-pass-thru fs
-            (info "Adding cljs.core cache to %s...\n" dir))
-          (sift :add-jar {(first clojurescript-dep) cache-fs-path-regex})
-          (transit-jsonify :transit-path cache-fs-path :json-name cache-json-name)
-          (sift :include #{cache-fs-path-regex} :invert true)
-          (sift :move {(re-pattern cache-json-name) (str dir cache-json-name)}))))
+  (comp (with-pass-thru fs
+          (info "Adding cache json to %s...\n" dir))
+        ;; Not quite sure why this :add-jar is necessary, nor why it works:
+        (sift :add-jar {(first clojurescript-dep) #"NONE"})
+        (sift :move {#"main.out/(magbear/.*.cache.json)"       (str dir "/$1")})
+        (sift :move {#"main.out/(cljs/core[.]cljs.cache.json)" (str dir "/$1")})))
+
+;;;;;;;;;;;;;;;;;;
+;;  MAIN TASKS  ;;
+;;;;;;;;;;;;;;;;;;
+
+(deftask build
+  "Build the final artifact, if no type is passed in, it builds production."
+  [t type VAL kw "The build type, either prod or dev"]
+  (let [options (options (or type :prod))]
+    (boot.util/info "Building %s profile...\n" (:type options))
+    (apply set-env! (reduce #(into %2 %1) [] (:env options)))
+    (set-system-properties! (:props options))
+    (comp (version-file)
+          (apply cljs (reduce #(into %2 %1) [] (:cljs options)))
+          (add-cljs-source)
+          (add-cache :dir "js-cache")
+          (sift :include #{#"main\.out"}
+                :invert true)
+          (target))))
+
+(deftask dev
+  "Start the dev interactive environment."
+  []
+  (boot.util/info "Starting interactive dev...\n")
+  (let [options (options :dev)]
+    (apply set-env! (reduce #(into %2 %1) [] (:env options)))
+    (set-system-properties! (:props options))
+    (comp (version-file)
+          (watch)
+          (cljs-repl)
+          (reload :on-jsload 'cljs-repl-web.core/main)
+          (apply cljs (reduce #(into %2 %1) [] (:cljs options)))
+          (add-cljs-source)
+          (add-cache :dir "js-cache")
+          (serve))))
