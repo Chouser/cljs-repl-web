@@ -7,7 +7,10 @@
 ;;; We can easily add or remove sections/topics and they will be automatically
 ;;; displayed in the API panel.
 (def custom-api-map
-  {:sections [(Section. "Useful Functions" {:type :symbols}
+  {:sections [(Section. "Magbear commands" {:type :symbols}
+                        [(Topic. "misc"
+                                 '(set-mode!))])
+              #_(Section. "Useful Functions" {:type :symbols}
                         [(Topic. "math"
                                  '(+ - * / quot rem mod inc dec max min rand))
                          (Topic. "comparison"
@@ -20,13 +23,13 @@
                                        take-while keep remove merge-with iterate repeatedly))
                          (Topic. "functions as data"
                                  '(apply partial comp complement juxt))])
-              (Section. "Datatypes" {:type :texts}
+              #_(Section. "Datatypes" {:type :texts}
                         [(Topic. "maps " '({:key1 val1 :key2 val2}))
                          (Topic. "vectors" '([1 2 3] [:a :b :c]))
                          (Topic. "sets" '(#{:a :b :c 1 2 3}))
                          (Topic. "scalars" '(a-symbol :a-keyword "\"a-string\""))
                          (Topic. "arrays" '((array 1 2 3)))])
-              (Section. "Functions" {:type :texts}
+              #_(Section. "Functions" {:type :texts}
                         [(Topic. "calling"
                                  '("(<FUNCTION> <ARGS*>)"))
                          (Topic. "defining named functions"
@@ -35,7 +38,7 @@
                                  '("(fn |NAME| [<ARGS*>] |CONSTRAINTS| <ACTIONS*>)"))
                          (Topic. "anonymous inline funcion"
                                  '("#(<ACTION> |% %2 %3 OR %&|)"))])
-              (Section. "Sequences" {:type :symbols}
+              #_(Section. "Sequences" {:type :symbols}
                         [(Topic. "creation"
                                  '(vec hash-map set for list list* sorted-map
                                        repeat range cycle seq rseq))
@@ -46,7 +49,7 @@
                                  '(into conj cons assoc flatten merge assoc-in
                                         dissoc zipmap partition update-in reverse
                                         take drop distinct))])
-              (Section. "Useful Macros" {:type :symbols}
+              #_(Section. "Useful Macros" {:type :symbols}
                         [(Topic. "conditionals"
                                  '(if if-not if-let cond condp and or not when when-let
                                       when-not case))
@@ -55,7 +58,7 @@
                          (Topic. "defining things"
                                  '(def defn fn let letfn defmulti defmethod
                                     deftype defrecord reify this-as declare ns))])
-              (Section. "JavaScript Interop" {:type :texts}
+              #_(Section. "JavaScript Interop" {:type :texts}
                         [(Topic. "method call" '("(.the-method target-object args...)"))
                          (Topic. "property access" '("(.-property target-object)"))
                          (Topic. "property setting" '("(set! (.-title js/document) \"Hi!\")"))

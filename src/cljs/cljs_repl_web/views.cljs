@@ -34,7 +34,7 @@
 (def current-step (reagent/atom @(:current-step tour)))
 
 (def tour-steps
-  {:welcome {:title "Welcome to clojurescript.io!"
+  {:welcome {:title "Here is your Magbear!"
              :body [:div [:p "Here you will find a terminal-like REPL which you can use when learning Clojure/ClojureScript or just trying new things out."]
                     [:p "It contains many features, so let’s start!"]]}
    :step1 {:title "Tour 1 of 9"
@@ -61,7 +61,7 @@
                   [:p "Only what is shown in the REPL will be sent to Gist. So even if you have some items in your history but the current “screen” is empty you won’t be able to create a Gist."]]}
    :step4 {:title "Tour 4 of 9"
            :body [:div [:h1.tour-title "Clear examples"]
-                  [:p "[Still TBD for magbears:] Just under the REPL you will find many buttons, logically grouped by topic. Clicking on them will open a popup (this feature will be explained in another step of this tutorial)."]
+                  [:p "Just under the REPL you will find many buttons, logically grouped by topic. Clicking on them will open a popup (this feature will be explained in another step of this tutorial)."]
                   [:span "One of the actions you can take is send the examples directly to the REPL: for example the"]
                   [:span.symbol " + "]
                   [:span "symbol contains 5 examples you can evaluate. If for any reason you want to interrupt the examples’ evaluation just click on this button."]

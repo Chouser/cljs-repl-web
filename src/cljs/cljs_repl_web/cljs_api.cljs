@@ -1,7 +1,28 @@
 (ns cljs-repl-web.cljs-api)
 
 (def cljs-api-edn {:symbols
- {"partial"
+ {
+  "set-mode!"
+  {:description "Sets a goal mode for your magbear",
+   :examples-htmls
+   ["<pre><code class=\"clj\">(magbear.model/set-mode! :curl)\n(magbear.model/set-mode! :stand)\n(magbear.model/set-mode! :walk)</code></pre>"],
+   :ns "magbear.model",
+   :name "set-mode!",
+   :signature ["[mode]"],
+   :type "function",
+   :examples-strings [["(magbear.model/set-mode! :curl)"
+                       "(magbear.model/set-mode! :stand)"
+                       "(magbear.model/set-mode! :walk)"]
+                      #_["(min 1 2 3 4)" "(apply min [1 2 3 4])"]],
+   :examples
+   [#_{:id "ab2de5",
+     :content
+     "```clj\n(min 1 2 3 4)\n;; => 1\n```\n\nApply it to a collection:\n\n```clj\n(apply min [1 2 3 4])\n;; => 1\n```"}],
+   :full-name "magbear.model/set-mode!",
+   :docstring "Sets a goal mode for your magbear."} 
+
+
+  "partial"
   {:description
    "Takes a function `f` and fewer than the normal arguments to `f`. Returns a\nfunction that takes a variable number of additional arguments. When called, the\nreturned function calls `f` with the original arguments plus the additional\narguments.\n\n`((partial f a b) c d)` => `(f a b c d)`",
    :examples-htmls [],

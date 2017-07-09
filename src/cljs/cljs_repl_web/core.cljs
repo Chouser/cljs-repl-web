@@ -42,5 +42,5 @@
                                                                              (app/create-dictionary (common/source-without-prompt (.getValue %)) console-key)
                                                                              (utils/align-suggestions-list %2))}]
                     (.getElementById js/document "app-center"))
-    #_(reagent/render [views/bottom-panel] (.getElementById js/document "app-bottom"))
+    (reagent/render [views/bottom-panel] (.getElementById js/document "app-bottom"))
     #_(reagent/render [views/footer-component] (.getElementById js/document "app-footer"))))
